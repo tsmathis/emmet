@@ -401,9 +401,6 @@ class TaskDoc(StructureMetadata, extra="allow"):
         description="Information on the structural transformations, parsed from a "
         "transformations.json file",
     )
-    additional_json: Optional[Dict[str, Any]] = Field(
-        None, description="Additional json loaded from the calculation directory"
-    )
 
     custodian: Optional[List[CustodianDoc]] = Field(
         None,
@@ -491,7 +488,6 @@ class TaskDoc(StructureMetadata, extra="allow"):
         cls: Type[_T],
         dir_name: Union[Path, str],
         volumetric_files: Tuple[str, ...] = _VOLUMETRIC_FILES,
-        store_additional_json: bool = True,
         additional_fields: Optional[Dict[str, Any]] = None,
         volume_change_warning_tol: float = 0.2,
         task_names: Optional[list[str]] = None,
@@ -504,8 +500,6 @@ class TaskDoc(StructureMetadata, extra="allow"):
         ----------
         dir_name
             The path to the folder containing the calculation outputs.
-        store_additional_json
-            Whether to store additional json files found in the calculation directory.
         volumetric_files
             Volumetric files to search for.
         additional_fields
@@ -557,10 +551,6 @@ class TaskDoc(StructureMetadata, extra="allow"):
         custodian = _parse_custodian(dir_name)
         orig_inputs = _parse_orig_inputs(dir_name)
 
-        additional_json = None
-        if store_additional_json:
-            additional_json = _parse_additional_json(dir_name)
-
         dir_name = get_uri(dir_name)  # convert to full uri path
 
         # only store objects from last calculation
@@ -580,7 +570,6 @@ class TaskDoc(StructureMetadata, extra="allow"):
             transformations=transformations,
             custodian=custodian,
             orig_inputs=orig_inputs,
-            additional_json=additional_json,
             icsd_id=icsd_id,
             tags=tags,
             author=author,
@@ -935,20 +924,6 @@ def _parse_orig_inputs(
                     orig_inputs[name.lower()] = vasp_input.from_file(filename)
 
     return orig_inputs
-
-
-def _parse_additional_json(dir_name: Path) -> Dict[str, Any]:
-    """Parse additional json files in the directory."""
-    additional_json = {}
-    for filename in dir_name.glob("*.json*"):
-        key = filename.name.split(".")[0]
-        # ignore FW.json(.gz) so jobflow doesn't try to parse prev_vasp_dir OutputReferences
-        # was causing atomate2 MP workflows to fail with ValueError: Could not resolve reference
-        # 7f5a7f14-464c-4a5b-85f9-8d11b595be3b not in store or cache
-        # contact @janosh in case of questions
-        if key not in ("custodian", "transformations", "FW"):
-            additional_json[key] = loadfn(filename, cls=None)
-    return additional_json
 
 
 def _get_max_force(calc_doc: Calculation) -> Optional[float]:

@@ -1,0 +1,55 @@
+name: check-enums
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  check-enums:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip pip-tools black ruamel.yaml
+          pip install --user --no-deps -e ./emmet-core
+
+      - name: Generate enums and check output
+        id: enums
+        shell: bash -l {0}
+        run: |
+          set -e
+          python emmet-core/dev_scripts/generate_enums.py
+          black emmet-core/emmet/core/*/calc_types/enums.py
+          echo "count=$(git diff --exit-code --quiet HEAD emmet-core/emmet/core/*/calc_types/enums.py || echo "1")" >> $GITHUB_OUTPUT
+          echo "files=$(git ls-files --exclude-standard --others emmet-core/emmet/core/*/calc_types/enums.py | wc -l | xargs)" >> $GITHUB_OUTPUT
+
+      - name: Commit & push enums changes
+        shell: bash -l {0}
+        run: |
+          set -e
+          if [[ "${{ steps.enums.outputs.count }}" > 0 || "${{ steps.enums.outputs.files }}" > 0 ]]; then
+            git config user.name github-actions
+            git config user.email github-actions@github.com
+            git add emmet-core/emmet/core/*/calc_types/enums.py
+            git commit --allow-empty -m "[automated commit] update calc type enums"
+            git push
+          else
+            echo "No changes detected in enum files."
+          fi
